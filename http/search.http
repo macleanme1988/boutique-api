@@ -1,0 +1,20 @@
+### Search: GET /search?q=   (active products by name/description/SKU, plus category names)
+@baseUrl = http://localhost:8000
+
+### Simple search (case-insensitive; name matches are listed first)
+GET {{baseUrl}}/search?q=linen
+
+### Search by SKU
+GET {{baseUrl}}/search?q=drs-001
+
+### With filters: price range, in-stock only, one category
+GET {{baseUrl}}/search?q=dress&min_price=50&max_price=150&in_stock=true&category_id=1
+
+### Pagination (total_products counts all matches)
+GET {{baseUrl}}/search?q=silk&skip=0&limit=5
+
+### Missing q  -> 422
+GET {{baseUrl}}/search
+
+### Health check
+GET {{baseUrl}}/health

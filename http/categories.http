@@ -1,0 +1,45 @@
+### Categories: run top to bottom with the VS Code "REST Client" extension
+### (or any .http runner). Seed data gives categories 1-3: `python -m app.seed`
+@baseUrl = http://localhost:8000
+
+### List categories (sorted by name, paginated)
+GET {{baseUrl}}/categories?skip=0&limit=50
+
+### Get one category
+GET {{baseUrl}}/categories/1
+
+### Create a category  -> 201
+POST {{baseUrl}}/categories
+Content-Type: application/json
+
+{
+  "name": "Knitwear",
+  "description": "Cardigans, jumpers and scarves"
+}
+
+### Duplicate name (case-insensitive)  -> 409
+POST {{baseUrl}}/categories
+Content-Type: application/json
+
+{ "name": "knitwear" }
+
+### Replace a category (PUT)  -> 200
+PUT {{baseUrl}}/categories/1
+Content-Type: application/json
+
+{
+  "name": "Dresses",
+  "description": "Summer and evening dresses"
+}
+
+### Missing category  -> 404
+GET {{baseUrl}}/categories/99999
+
+### Validation error (empty name)  -> 422
+POST {{baseUrl}}/categories
+Content-Type: application/json
+
+{ "name": "" }
+
+### Delete a category that still has products  -> 409 (an empty category gives 204)
+DELETE {{baseUrl}}/categories/1

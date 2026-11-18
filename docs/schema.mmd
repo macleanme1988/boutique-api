@@ -1,0 +1,52 @@
+erDiagram
+    direction LR
+    CATEGORIES ||--o{ PRODUCTS : "groups"
+    PRODUCTS ||--o{ ORDER_ITEMS : "is ordered as"
+    ORDERS ||--|{ ORDER_ITEMS : "has"
+    PRODUCTS ||--o{ INVENTORY_MOVEMENTS : "logs"
+    ORDERS |o--o{ INVENTORY_MOVEMENTS : "caused by"
+
+    CATEGORIES {
+        int id PK
+        varchar_100 name UK "unique, case-insensitive in API"
+        text description
+        timestamptz created_at
+    }
+    PRODUCTS {
+        int id PK
+        varchar_50 sku UK
+        varchar_200 name "indexed"
+        text description
+        numeric_10_2 price "CHECK price > 0"
+        int stock_quantity "CHECK >= 0"
+        int low_stock_threshold
+        boolean is_active
+        int category_id FK
+        timestamptz created_at
+        timestamptz updated_at
+    }
+    ORDERS {
+        int id PK
+        varchar_200 customer_name
+        varchar_254 customer_email "indexed"
+        text shipping_address
+        varchar_20 status "pending, confirmed, shipped, delivered, cancelled"
+        numeric_12_2 total_amount
+        timestamptz created_at
+        timestamptz updated_at
+    }
+    ORDER_ITEMS {
+        int id PK
+        int order_id FK "ON DELETE CASCADE"
+        int product_id FK
+        int quantity "CHECK quantity > 0"
+        numeric_10_2 unit_price "price frozen at order time"
+    }
+    INVENTORY_MOVEMENTS {
+        int id PK
+        int product_id FK "indexed"
+        int change "+ restock, - sale or loss"
+        varchar_200 reason
+        int order_id FK "nullable, ON DELETE SET NULL"
+        timestamptz created_at
+    }

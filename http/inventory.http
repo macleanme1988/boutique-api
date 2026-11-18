@@ -1,0 +1,32 @@
+### Inventory management
+@baseUrl = http://localhost:8000
+
+### Low-stock report: active products at or below their reorder level
+GET {{baseUrl}}/products/low-stock
+
+### Restock +20  -> 200
+POST {{baseUrl}}/products/1/stock
+Content-Type: application/json
+
+{ "change": 20, "reason": "Supplier delivery" }
+
+### Remove stock (damaged goods)  -> 200
+POST {{baseUrl}}/products/1/stock
+Content-Type: application/json
+
+{ "change": -2, "reason": "Damaged in storage" }
+
+### Remove more than exists  -> 409
+POST {{baseUrl}}/products/1/stock
+Content-Type: application/json
+
+{ "change": -100000, "reason": "Typo" }
+
+### Zero change  -> 422
+POST {{baseUrl}}/products/1/stock
+Content-Type: application/json
+
+{ "change": 0, "reason": "Nothing" }
+
+### Stock history for a product (newest first)
+GET {{baseUrl}}/products/1/stock-movements

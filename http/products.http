@@ -1,0 +1,72 @@
+### Products: seed data gives products 1-8 (`python -m app.seed`)
+@baseUrl = http://localhost:8000
+
+### List products (filters: category_id, is_active, skip, limit)
+GET {{baseUrl}}/products?category_id=1&is_active=true&limit=20
+
+### Get one product
+GET {{baseUrl}}/products/1
+
+### Create a product  -> 201 (logs an "Opening stock" movement)
+POST {{baseUrl}}/products
+Content-Type: application/json
+
+{
+  "sku": "KNT-001",
+  "name": "Merino Cardigan",
+  "description": "Soft merino wool",
+  "price": "95.50",
+  "stock_quantity": 12,
+  "category_id": 1,
+  "low_stock_threshold": 3,
+  "is_active": true
+}
+
+### Duplicate SKU  -> 409
+POST {{baseUrl}}/products
+Content-Type: application/json
+
+{ "sku": "DRS-001", "name": "Copy", "price": "10.00", "category_id": 1 }
+
+### Unknown category  -> 422
+POST {{baseUrl}}/products
+Content-Type: application/json
+
+{ "sku": "BAD-1", "name": "Nope", "price": "10.00", "category_id": 99999 }
+
+### Invalid price  -> 422
+POST {{baseUrl}}/products
+Content-Type: application/json
+
+{ "sku": "BAD-2", "name": "Free?", "price": "-5", "category_id": 1 }
+
+### Replace catalogue fields (PUT). Stock is NOT changed here; use /stock.
+PUT {{baseUrl}}/products/1
+Content-Type: application/json
+
+{
+  "sku": "DRS-001",
+  "name": "Linen Wrap Dress",
+  "description": "Breathable linen, knee length",
+  "price": "94.90",
+  "category_id": 1,
+  "low_stock_threshold": 5,
+  "is_active": true
+}
+
+### Deactivate a product (hides it from search, blocks new orders)
+PUT {{baseUrl}}/products/8
+Content-Type: application/json
+
+{
+  "sku": "ACC-003",
+  "name": "Silk Scarf",
+  "description": "Printed silk, 90cm square",
+  "price": "28.00",
+  "category_id": 3,
+  "low_stock_threshold": 5,
+  "is_active": false
+}
+
+### Delete a product that is in no order  -> 204 (a product that appears in an order gives 409)
+DELETE {{baseUrl}}/products/8

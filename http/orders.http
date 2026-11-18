@@ -1,0 +1,89 @@
+### Orders. Placing an order reserves stock; cancelling returns it.
+### The request names below let later requests reuse earlier responses (VS Code REST Client).
+@baseUrl = http://localhost:8000
+
+### List orders (filters: status, customer_email, skip, limit)
+GET {{baseUrl}}/orders?status=pending
+
+### Place an order  -> 201, total_amount is computed server-side
+# @name placeOrder
+POST {{baseUrl}}/orders
+Content-Type: application/json
+
+{
+  "customer_name": "Ama Mensah",
+  "customer_email": "ama@example.com",
+  "shipping_address": "12 Market Road, Bolgatanga",
+  "items": [
+    { "product_id": 1, "quantity": 2 },
+    { "product_id": 6, "quantity": 1 }
+  ]
+}
+
+### Get the order we just placed
+@orderId = {{placeOrder.response.body.$.id}}
+GET {{baseUrl}}/orders/{{orderId}}
+
+### More than available  -> 409 (nothing is reserved)
+POST {{baseUrl}}/orders
+Content-Type: application/json
+
+{
+  "customer_name": "Kofi Boateng",
+  "customer_email": "kofi@example.com",
+  "items": [{ "product_id": 1, "quantity": 1000 }]
+}
+
+### Unknown product  -> 422
+POST {{baseUrl}}/orders
+Content-Type: application/json
+
+{
+  "customer_name": "Kofi Boateng",
+  "customer_email": "kofi@example.com",
+  "items": [{ "product_id": 99999, "quantity": 1 }]
+}
+
+### Empty basket  -> 422
+POST {{baseUrl}}/orders
+Content-Type: application/json
+
+{ "customer_name": "Kofi", "customer_email": "kofi@example.com", "items": [] }
+
+### Confirm the order. Lifecycle: pending > confirmed > shipped > delivered
+PUT {{baseUrl}}/orders/{{orderId}}
+Content-Type: application/json
+
+{
+  "customer_name": "Ama Mensah",
+  "customer_email": "ama@example.com",
+  "shipping_address": "12 Market Road, Bolgatanga",
+  "status": "confirmed"
+}
+
+### Skip a state (confirmed > delivered)  -> 409
+PUT {{baseUrl}}/orders/{{orderId}}
+Content-Type: application/json
+
+{
+  "customer_name": "Ama Mensah",
+  "customer_email": "ama@example.com",
+  "status": "delivered"
+}
+
+### Cancel the order: stock goes back, order becomes final
+PUT {{baseUrl}}/orders/{{orderId}}
+Content-Type: application/json
+
+{
+  "customer_name": "Ama Mensah",
+  "customer_email": "ama@example.com",
+  "shipping_address": "12 Market Road, Bolgatanga",
+  "status": "cancelled"
+}
+
+### Delete a cancelled (or pending) order  -> 204. Confirmed, shipped or delivered orders give 409.
+DELETE {{baseUrl}}/orders/{{orderId}}
+
+### Missing order  -> 404
+GET {{baseUrl}}/orders/99999
