@@ -13,6 +13,25 @@ docker compose exec api python -m app.seed    # optional: 3 categories, 8 produc
 * Swagger UI: <http://localhost:8000/docs> · ReDoc: <http://localhost:8000/redoc> · Spec: <http://localhost:8000/openapi.json>
 * The database container has no published port, so only the API can reach it. Passwords come from `.env` (copy `.env.example`).
 
+## Observability (OpenTelemetry → Collector → Prometheus / Tempo / Loki → Grafana)
+
+`docker compose up --build -d` also starts the full telemetry stack:
+
+| Service | URL | Role |
+|---|---|---|
+| Grafana | <http://localhost:3000> | Dashboard **Boutique API: Unified Observability**, Explore (no login, demo only) |
+| Prometheus | <http://localhost:9090> | Metrics (scrapes the Collector) |
+| Tempo | <http://localhost:3200> | Traces (queried through Grafana) |
+| Loki | <http://localhost:3100> | Logs (queried through Grafana) |
+
+* App instrumentation: `app/telemetry.py` (SDK, exporters, FastAPI + SQLAlchemy auto-instrumentation), `app/tracing.py` (manual spans), `app/metrics.py` (business metrics).
+* Pipeline configuration: `observability/` (Collector, Prometheus, Tempo, Loki, Grafana provisioning and dashboard JSON).
+* Every response carries an `X-Trace-Id` header; log lines contain `trace_id=` and `span_id=`, which is what links logs and traces.
+* Customer names, e-mails and addresses are never put in telemetry (`customer_email` in URLs is redacted).
+* Switch off with `OTEL_ENABLED=false`.
+* Generate demo traffic: `docker compose --profile tools run --rm traffic`.
+* **Step-by-step evidence capture: [`docs/OBSERVABILITY_EVIDENCE_GUIDE.md`](docs/OBSERVABILITY_EVIDENCE_GUIDE.md)**
+
 ## Run locally without Docker
 
 ```bash

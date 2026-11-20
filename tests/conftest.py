@@ -7,8 +7,42 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from types import SimpleNamespace
+
+from opentelemetry.sdk._logs.export import InMemoryLogRecordExporter, SimpleLogRecordProcessor
+from opentelemetry.sdk.metrics.export import InMemoryMetricReader
+from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+
 from app.database import Base, get_db
 from app.main import app
+from app.telemetry import RedactingSpanExporter, setup_telemetry
+
+
+@pytest.fixture(scope="session")
+def otel():
+    """Install OpenTelemetry once for the whole test session, exporting to memory instead of a Collector.
+
+    Because this is session-wide and the instrumented `app` is shared, *every* test in the suite runs
+    with tracing, metrics and logging switched on: the whole suite doubles as a regression test that
+    instrumentation never changes API behaviour.
+    """
+    spans, reader, logs = InMemorySpanExporter(), InMemoryMetricReader(), InMemoryLogRecordExporter()
+    handles = setup_telemetry(
+        app,
+        span_processors=[SimpleSpanProcessor(RedactingSpanExporter(spans))],
+        metric_readers=[reader],
+        log_processors=[SimpleLogRecordProcessor(logs)],
+    )
+    return SimpleNamespace(spans=spans, reader=reader, logs=logs, handles=handles)
+
+
+@pytest.fixture(autouse=True)
+def telemetry(otel):
+    """Start every test with empty span and log buffers (metrics are cumulative; tests compare deltas)."""
+    otel.spans.clear()
+    otel.logs.clear()
+    return otel
 
 
 @pytest.fixture()

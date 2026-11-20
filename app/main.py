@@ -5,8 +5,9 @@ from fastapi import Depends, FastAPI
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app.database import Base, engine, get_db
+from app.database import Base, SessionLocal, engine, get_db
 from app.routers import categories, orders, products, search
+from app.telemetry import init_observability
 
 DESCRIPTION = """
 RESTful API for a boutique shop: product catalogue, orders, inventory and search.
@@ -34,6 +35,8 @@ TAGS = [
 async def lifespan(_: FastAPI):
     Base.metadata.create_all(bind=engine)
     yield
+    if telemetry is not None:  # flush buffered spans, metrics and logs on a clean shutdown
+        telemetry.shutdown()
 
 
 app = FastAPI(
@@ -51,6 +54,9 @@ app.include_router(products.inventory_router)
 app.include_router(products.router)
 app.include_router(orders.router)
 app.include_router(search.router)
+
+# OpenTelemetry (traces, metrics, logs). A no-op unless OTEL_ENABLED=true; see app/telemetry.py.
+telemetry = init_observability(app, engine, SessionLocal)
 
 
 @app.get("/health", tags=["Health"], summary="Liveness and database check")

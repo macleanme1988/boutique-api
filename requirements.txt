@@ -1,6 +1,11 @@
 fastapi==0.163.1
 uvicorn==0.54.0
-sqlalchemy==2.1.9
+sqlalchemy==2.0.58  # 2.1 is not yet supported by opentelemetry-instrumentation-sqlalchemy
 psycopg[binary]==3.3.9
 pydantic==2.13.5
 email-validator==2.4.0
+opentelemetry-sdk==1.45.2
+opentelemetry-exporter-otlp-proto-grpc==1.45.2
+opentelemetry-instrumentation-fastapi==0.66b2
+opentelemetry-instrumentation-sqlalchemy==0.66b2
+opentelemetry-instrumentation-logging==0.66b2

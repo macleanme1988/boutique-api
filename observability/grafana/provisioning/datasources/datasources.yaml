@@ -1,0 +1,66 @@
+apiVersion: 1
+
+# Grafana loads these three data sources at start-up, so there is nothing to click through.
+# The "tracesToLogsV2" block (Tempo) and "derivedFields" block (Loki) are what create the
+# trace <-> log correlation in the Grafana interface.
+datasources:
+  - name: Prometheus
+    uid: prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    jsonData:
+      timeInterval: 5s
+
+  - name: Tempo
+    uid: tempo
+    type: tempo
+    access: proxy
+    url: http://tempo:3200
+    jsonData:
+      # Trace -> Logs: the "Logs for this span" button on a span runs a Loki query for that trace id.
+      tracesToLogsV2:
+        datasourceUid: loki
+        spanStartTimeShift: "-5m"
+        spanEndTimeShift: "5m"
+        filterByTraceID: true
+        filterBySpanID: false
+        tags:
+          - key: service.name
+            value: service_name
+      # Trace -> Metrics: jump from a span to the request rate / latency of the same service.
+      tracesToMetrics:
+        datasourceUid: prometheus
+        spanStartTimeShift: "-5m"
+        spanEndTimeShift: "5m"
+        tags:
+          - key: service.name
+            value: service_name
+        queries:
+          - name: Request rate
+            query: sum(rate(traces_span_metrics_calls_total{$$__tags}[1m]))
+      serviceMap:
+        datasourceUid: prometheus
+      nodeGraph:
+        enabled: true
+      search:
+        hide: false
+      lokiSearch:
+        datasourceUid: loki
+
+  - name: Loki
+    uid: loki
+    type: loki
+    access: proxy
+    url: http://loki:3100
+    jsonData:
+      maxLines: 500
+      # Log -> Trace: every "trace_id=<32 hex chars>" in a log line becomes a link that opens the trace in Tempo.
+      derivedFields:
+        - name: TraceID
+          matcherType: regex
+          matcherRegex: "trace_id=(\\w+)"
+          url: "$${__value.raw}"
+          datasourceUid: tempo
+          urlDisplayLabel: "Open trace in Tempo"

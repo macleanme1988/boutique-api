@@ -1,6 +1,13 @@
-# API and database run in SEPARATE containers on a private network.
-#   docker compose up --build
-#   docker compose exec api python -m app.seed      # optional demo data
+# Boutique API + full observability stack.
+#
+#   docker compose up --build -d
+#   docker compose exec api python -m app.seed        # optional demo data
+#   docker compose --profile tools run --rm traffic    # generate realistic traffic
+#
+#   Boutique API  http://localhost:8000/docs      Grafana     http://localhost:3000
+#   Prometheus    http://localhost:9090           Tempo API   http://localhost:3200
+#
+# Telemetry flow:  api --OTLP--> otel-collector --> Prometheus (metrics) / Tempo (traces) / Loki (logs)
 services:
   db:
     image: postgres:16-alpine
@@ -16,19 +23,101 @@ services:
       timeout: 3s
       retries: 10
     # No "ports:" on purpose: only the API container can reach the database.
-    # Uncomment to inspect it from your machine with psql or a GUI:
-    # ports:
-    #   - "127.0.0.1:5432:5432"
 
   api:
     build: .
     depends_on:
       db:
         condition: service_healthy
+      otel-collector:
+        condition: service_started
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-boutique}:${POSTGRES_PASSWORD:-boutique}@db:5432/${POSTGRES_DB:-boutique}
+      OTEL_ENABLED: "true"
+      OTEL_SERVICE_NAME: boutique-api
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
+      OTEL_METRIC_EXPORT_INTERVAL: "5000"   # ms: fast for the demo
     ports:
       - "8000:8000"
 
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.119.0
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes:
+      - ./observability/otel-collector-config.yaml:/etc/otelcol/config.yaml:ro
+    depends_on:
+      - tempo
+      - loki
+    ports:
+      - "127.0.0.1:8889:8889"   # metrics exposed for Prometheus (handy to open in a browser)
+
+  prometheus:
+    image: prom/prometheus:v3.1.0
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=24h
+    volumes:
+      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - promdata:/prometheus
+    ports:
+      - "127.0.0.1:9090:9090"
+
+  tempo:
+    image: grafana/tempo:2.7.1
+    command: ["-config.file=/etc/tempo.yaml"]
+    user: "0:0"                 # lets Tempo write to the named volume on Docker Desktop
+    volumes:
+      - ./observability/tempo.yaml:/etc/tempo.yaml:ro
+      - tempodata:/var/tempo
+    ports:
+      - "127.0.0.1:3200:3200"
+
+  loki:
+    image: grafana/loki:3.4.2
+    command: ["-config.file=/etc/loki/config.yaml"]
+    user: "0:0"
+    volumes:
+      - ./observability/loki-config.yaml:/etc/loki/config.yaml:ro
+      - lokidata:/loki
+    ports:
+      - "127.0.0.1:3100:3100"
+
+  grafana:
+    image: grafana/grafana:11.5.2
+    depends_on:
+      - prometheus
+      - tempo
+      - loki
+    environment:
+      # Demo only: no login screen. Do NOT do this on a public server.
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+      GF_FEATURE_TOGGLES_ENABLE: traceqlEditor
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/boutique.json
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafanadata:/var/lib/grafana
+    ports:
+      - "127.0.0.1:3000:3000"
+
+  # Optional: `docker compose --profile tools run --rm traffic`
+  traffic:
+    image: python:3.13-slim
+    profiles: ["tools"]
+    depends_on:
+      - api
+    environment:
+      API_URL: http://api:8000
+    volumes:
+      - ./scripts/generate_traffic.py:/app/generate_traffic.py:ro
+    command: ["python", "/app/generate_traffic.py"]
+
 volumes:
   pgdata:
+  promdata:
+  tempodata:
+  lokidata:
+  grafanadata:
