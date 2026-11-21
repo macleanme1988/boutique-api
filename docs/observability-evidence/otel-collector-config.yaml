@@ -1,0 +1,85 @@
+# OpenTelemetry Collector: the single doorway between the app and every backend.
+#
+#   Boutique API --OTLP--> Collector --+--> traces  --> Tempo        (+ span metrics --> Prometheus)
+#                                      +--> metrics --> Prometheus   (scraped from :8889)
+#                                      +--> logs    --> Loki         (native OTLP endpoint)
+#
+# The app only knows one address (OTEL_EXPORTER_OTLP_ENDPOINT). Swapping a backend means editing this file,
+# not redeploying the app.
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  # Protect the Collector itself: refuse data rather than run out of memory.
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 300
+    spike_limit_mib: 80
+  # Send in batches; 1s keeps the demo responsive (use 5-10s in production).
+  batch:
+    timeout: 1s
+  # Stamp every signal with the environment it came from.
+  resource/environment:
+    attributes:
+      - key: deployment.environment
+        value: demo
+        action: upsert
+
+connectors:
+  # Turns every span into request-rate / error / latency metrics ("RED" metrics) with no app code.
+  # Produces traces_span_metrics_calls_total and traces_span_metrics_duration_milliseconds_*.
+  spanmetrics:
+    histogram:
+      explicit:
+        buckets: [5ms, 10ms, 25ms, 50ms, 100ms, 250ms, 500ms, 1s, 2500ms, 5s]
+    dimensions:
+      - name: http.method
+      - name: http.route
+      - name: http.status_code
+      - name: boutique.outcome
+    metrics_flush_interval: 5s
+
+exporters:
+  # Traces -> Tempo (gRPC, inside the Docker network so no TLS)
+  otlp/tempo:
+    endpoint: tempo:4317
+    tls:
+      insecure: true
+  # Logs -> Loki's native OTLP endpoint (the exporter appends /v1/logs)
+  otlphttp/loki:
+    endpoint: http://loki:3100/otlp
+  # Metrics -> exposed for Prometheus to scrape. Resource attributes (service.name ...) become labels.
+  prometheus:
+    endpoint: 0.0.0.0:8889
+    resource_to_telemetry_conversion:
+      enabled: true
+    metric_expiration: 5m
+  # Uncomment the debug exporter in a pipeline below to print what flows through to the Collector log.
+  debug:
+    verbosity: basic
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, resource/environment, batch]
+      exporters: [otlp/tempo, spanmetrics]
+    metrics:
+      receivers: [otlp, spanmetrics]
+      processors: [memory_limiter, resource/environment, batch]
+      exporters: [prometheus]
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, resource/environment, batch]
+      exporters: [otlphttp/loki]
+  telemetry:
+    metrics:
+      # The Collector's own health metrics, scraped by Prometheus on :8888
+      level: normal
+      address: 0.0.0.0:8888

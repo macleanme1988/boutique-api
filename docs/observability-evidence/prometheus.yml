@@ -1,0 +1,18 @@
+global:
+  scrape_interval: 5s       # fast for the demo; 15s-30s is typical in production
+  evaluation_interval: 15s
+
+scrape_configs:
+  # Application + span metrics, exposed by the Collector's prometheus exporter
+  - job_name: boutique-telemetry
+    static_configs:
+      - targets: ["otel-collector:8889"]
+
+  # The Collector's own health (spans accepted/refused, queue sizes ...)
+  - job_name: otel-collector
+    static_configs:
+      - targets: ["otel-collector:8888"]
+
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
